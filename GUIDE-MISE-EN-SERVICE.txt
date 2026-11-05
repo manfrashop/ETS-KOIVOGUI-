@@ -1,0 +1,53 @@
+ETS KOÏVOGUI ET FRÈRE — Application de gestion (stock, achats, ventes de boissons)
+===========================================================================
+
+1. CE QUI EST FOURNI
+- Application web installable sur téléphone (PWA) : stock, achats, ventes comptant/crédit, caisse (POS), clients, dépenses, retours, factures PDF, alertes, rapports.
+- Vente et stock par conditionnement : casier (24), carton (12), boîte (48)… Le stock est compté en bouteilles/unités ; les conversions se font à la vente, à l'entrée de stock et à l'affichage.
+- Catégories de départ : Eaux, Sodas & gazeuses, Jus & nectars, Bières, Boissons énergisantes, Autres (modifiables ; bouton « ➕ Nouvelle » dans la fiche produit).
+- Aucune donnée d'un autre client : l'application démarre VIDE.
+
+2. DEUX FAÇONS DE L'UTILISER
+A) Mode Local (immédiat, sans Firebase) : les données restent sur l'appareil. Adapté à un seul téléphone ou ordinateur. Faites des sauvegardes régulières (Administration → Sauvegarde).
+B) Mode Cloud (recommandé dès que plusieurs personnes ou appareils l'utilisent) : données synchronisées via Firebase, un compte par utilisateur. Nécessite un projet Firebase AU NOM DU CLIENT (étape 4).
+
+3. MISE EN LIGNE (hébergement)
+L'application doit être servie en HTTPS (obligatoire pour les comptes, l'installation sur téléphone et le mode hors ligne).
+Options gratuites : Firebase Hosting, Netlify, GitHub Pages. Déposez tous les fichiers de ce dossier à la racine du site.
+Ne l'ouvrez pas par double-clic sur index.html : certaines fonctions exigent HTTPS (ou localhost).
+
+4. FIREBASE DU CLIENT (mode Cloud) — à faire une seule fois
+1. console.firebase.google.com → Ajouter un projet (compte Google du client ou de la société).
+2. Build → Authentication → Commencer → activer « E-mail / Mot de passe ».
+3. Build → Firestore Database → Créer une base (mode production, région proche).
+4. Firestore → onglet « Règles » → copier-coller le contenu du fichier firestore.rules fourni → Publier.
+5. Paramètres du projet → « Vos applications » → ajouter une application Web → copier l'objet de configuration (apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId).
+6. Dans l'application : Administration → Espace technique Firebase (mot de passe administrateur demandé) → coller la configuration en JSON → Enregistrer → Tester Firestore → choisir le mode « Cloud ».
+7. Créer le compte du premier administrateur (Authentication → Utilisateurs : e-mail + mot de passe). À la PREMIÈRE connexion en mode Cloud, cette personne devient administrateur ; ensuite l'écran « Utilisateurs » permet d'ajouter caissiers et magasiniers.
+IMPORTANT : ne réutilisez jamais le projet Firebase d'un autre client.
+
+5. PREMIER LANCEMENT (mode Local)
+Ouvrir l'application → saisir l'e-mail et un mot de passe d'au moins 8 caractères → confirmer la création de l'administrateur local. Notez le mot de passe : il ne peut pas être récupéré.
+
+6. PREMIERS PAS CONSEILLÉS
+1. Fournisseurs : ajouter les principaux fournisseurs.
+2. Produits : créer chaque boisson (unité = bouteille, canette…, prix d'achat et de vente PAR UNITÉ) puis ajouter ses conditionnements (Casier 24, Carton 12…).
+3. Stock initial : saisir en unités, ou faire une « Entrée » en casiers (conversion automatique).
+4. Utilisateurs : créer les comptes caissier / magasinier.
+5. Vendre : Ventes ou Caisse (POS) → choisir « bouteille » ou « casier » à côté de la quantité.
+
+7. À COMPLÉTER PAR LE CLIENT
+- Logo : intégré (icône de l'application, écran de connexion, barre latérale). Pour le changer, remplacer les 4 fichiers icon-*.png ou régénérer avec l'outil de personnalisation.
+- Adresse et e-mail de l'entreprise : pour l'instant seuls le nom, l'activité et le téléphone (+224 624 02 72 26) figurent sur les documents.
+- Pays supposé : République de Guinée (numéro en +224). À corriger si besoin.
+
+8. IMPRESSION
+Bouton 🖨️ sur chaque page. Sur téléphone, choisir « Enregistrer au format PDF ».
+
+9. SAUVEGARDE
+Mode Local : exporter régulièrement une sauvegarde (Administration). Mode Cloud : les données sont dans Firestore ; faire malgré tout une sauvegarde mensuelle.
+
+10. LIMITES CONNUES
+- Pas de prix spécial par casier (prix unitaire × nombre d'unités).
+- Commandes fournisseurs et retours comptés en unités.
+- Testé de manière automatisée ; à valider sur le téléphone du client avant la mise en service.

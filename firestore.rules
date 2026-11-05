@@ -1,0 +1,48 @@
+rules_version = '2';
+// ETS KOÏVOGUI ET FRÈRE — règles Firestore (à publier dans le projet Firebase du client)
+// Modèle : seuls les comptes listés dans members/{uid} accèdent aux données.
+// Le PREMIER utilisateur qui se connecte à l'app (aucun admin défini) devient
+// administrateur via un lot atomique (config/bootstrap + admins + members), une seule fois.
+// Ensuite, l'écran Utilisateurs crée / désactive les comptes (members) et gère admins.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuth()  { return request.auth != null; }
+    function signedIn() { return isAuth() && exists(/databases/$(database)/documents/members/$(request.auth.uid)); }
+    function isAdmin()  { return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
+    function bootstrapOpen() { return !exists(/databases/$(database)/documents/config/bootstrap); }
+    function claimingBootstrap(uid) {
+      return isAuth() && request.auth.uid == uid && bootstrapOpen()
+        && existsAfter(/databases/$(database)/documents/config/bootstrap)
+        && getAfter(/databases/$(database)/documents/config/bootstrap).data.uid == uid;
+    }
+
+    // Verrou d'amorçage : créable une seule fois, par le futur premier admin
+    match /config/bootstrap {
+      allow read: if isAuth();
+      allow create: if isAuth() && bootstrapOpen() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+    // Comptes autorisés (retirer un doc = désactiver le compte)
+    match /members/{uid} {
+      allow read: if isAuth() && request.auth.uid == uid;
+      allow create: if isAdmin() || claimingBootstrap(uid);
+      allow update, delete: if isAdmin();
+    }
+    // Administrateurs
+    match /admins/{uid} {
+      allow read: if isAuth() && request.auth.uid == uid;
+      allow create: if isAdmin() || claimingBootstrap(uid);
+      allow update, delete: if isAdmin();
+    }
+    // Profils / rôles applicatifs
+    match /utilisateurs/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    // Données métier : lecture/création/modification par les membres, suppression par les admins
+    match /{col}/{id} {
+      allow read, create, update: if signedIn() && col in ['produits','mouvements','ventes','commandes','fournisseurs','clients','depenses','retours','categories','journal','_ops'];
+      allow delete: if isAdmin() && col in ['produits','mouvements','ventes','commandes','fournisseurs','clients','depenses','retours','categories','journal'];
+    }
+  }
+}
