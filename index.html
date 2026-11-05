@@ -1130,6 +1130,7 @@ async function applyOp(o){
 }
 async function flushOutbox(){
   if(_busy||!sb||!firestoreDB||ACCESS_MODE!=='cloud'||navigator.onLine===false){syncBadge();return;}
+  if(!OUT.length){syncBadge();return;}
   _busy=true;
   try{
     while(OUT.length){
@@ -1194,7 +1195,7 @@ function syncBadge(){
 {const _si=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){let er=null;try{_si.call(this,k,v);}catch(e){er=e;}if(this===localStorage&&typeof idbMirror==='function'){let ts=0;try{ts=idbMirror(k,v);}catch(_){}if(ts){if(!er){try{_si.call(this,'ts_'+k,String(ts));}catch(_){}}else{window.__lsFull=true;er=null;}}}if(er)throw er;if(this===localStorage&&SYNC_K[k])syncSoon(SYNC_K[k]);};}
 addEventListener('online',()=>flushOutbox());addEventListener('offline',()=>syncBadge());
 addEventListener('pagehide',()=>{_dirty.forEach(enqueueDiff);_dirty.clear();saveSnap();});
-setInterval(()=>{if(ACCESS_MODE==='cloud'&&sb)flushOutbox();},30000);setInterval(syncBadge,5000);
+setInterval(()=>{if(ACCESS_MODE==='cloud'&&sb&&OUT.length&&navigator.onLine!==false)flushOutbox();},60000);setInterval(syncBadge,15000);
 /*END-SYNC-ENGINE-V2*/
 function setDemo(e,p){document.getElementById('l-email').value=e;document.getElementById('l-pass').value=p;}
 async function doLogin(){try{const em=document.getElementById('l-email').value.trim(),pw=document.getElementById('l-pass').value;if(!em||!pw){toast('Remplissez tous les champs','error');return;}if(ACCESS_MODE==='cloud'){try{if(!sb){if(!firebaseReady())throw new Error('Configurez Firebase pour le mode Cloud.');initFirebase();}showSync('Authentification Firebase…','');const{data,error}=await sb.auth.signInWithPassword({email:em,password:pw});if(error)throw error;let _boot=false;{const _uid=data.user.uid,_mb=await firestoreDB.collection('members').doc(_uid).get();
@@ -1323,11 +1324,11 @@ function productPhotoMarkup(p){
   const imgs=PRODUCT_PHOTO_GALLERIES[p.code]||[];
   if(imgs.length){
     return `<div class="mcard-photo-gallery" aria-label="Galerie photos ${esc(p.designation)}">
-      ${imgs.slice(0,4).map((src,i)=>`<div class="mcard-gallery-cell"><img src="${esc(src)}" alt="${esc(p.designation)} – vue ${i+1}" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.style.display='none'"></div>`).join('')}
+      ${imgs.slice(0,4).map((src,i)=>`<div class="mcard-gallery-cell"><img src="${esc(src)}" alt="${esc(p.designation)} – vue ${i+1}" loading="lazy" decoding="async" fetchpriority="low" referrerpolicy="no-referrer" onerror="this.parentElement.style.display='none'"></div>`).join('')}
       <span class="mcard-gallery-count">📷 ${imgs.length} photos</span>
     </div>`;
   }
-  return p.photo?`<img class="mcard-product-photo" src="${esc(p.photo)}" alt="Photo de ${esc(p.designation)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">`:'';
+  return p.photo?`<img class="mcard-product-photo" src="${esc(p.photo)}" alt="Photo de ${esc(p.designation)}" loading="lazy" decoding="async" fetchpriority="low" referrerpolicy="no-referrer" onerror="this.style.display='none'">`:'';
 }
 
 function refreshVerifiedProductPhotos(){
@@ -3407,7 +3408,7 @@ function posSearch(q){
 function posRenderGrid(prods){
   document.getElementById('pos-grid').innerHTML=prods.map(p=>`
     <div class="pos-card ${p.stock<=0?'rupture':''}" onclick="posAdd(${p.id})">
-      ${p.photo?`<img class="pos-product-photo" src="${esc(p.photo)}" alt="Photo illustrative de ${esc(p.designation)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<div style=&quot;font-size:26px;margin-bottom:6px&quot;>🥫</div>'">`:false?`<img class="pos-product-photo" src="${EMBEDDED_PRODUCT_IMAGES[p.id]||''}" alt="Photo de ${esc(p.designation)}" loading="lazy" onerror="this.outerHTML='<div style=&quot;font-size:26px;margin-bottom:6px&quot;>${getCat(p.categorie).emoji}</div>'">`:`<div style="font-size:26px;margin-bottom:6px">${getCat(p.categorie).emoji}</div>`}
+      ${p.photo?`<img class="pos-product-photo" src="${esc(p.photo)}" alt="Photo illustrative de ${esc(p.designation)}" loading="lazy" decoding="async" fetchpriority="low" referrerpolicy="no-referrer" onerror="this.outerHTML='<div style=&quot;font-size:26px;margin-bottom:6px&quot;>🥫</div>'">`:false?`<img class="pos-product-photo" src="${EMBEDDED_PRODUCT_IMAGES[p.id]||''}" alt="Photo de ${esc(p.designation)}" loading="lazy" decoding="async" fetchpriority="low" onerror="this.outerHTML='<div style=&quot;font-size:26px;margin-bottom:6px&quot;>${getCat(p.categorie).emoji}</div>'">`:`<div style="font-size:26px;margin-bottom:6px">${getCat(p.categorie).emoji}</div>`}
       <div class="pos-card-name">${esc(p.designation)}</div><div class="pos-card-price">${gnf(p.vente)}</div><div class="pos-card-stock">${p.stock<=0?'<span style="color:#F87171;font-weight:700">❌ Rupture</span>':'Stock: '+esc(fmtShort(p,p.stock))}</div>
       ${p.stock>0&&condList(p).length?'<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;justify-content:center">'+condList(p).filter(c=>c.qte<=p.stock).map(c=>`<span onclick="event.stopPropagation();posAddPack(${p.id},${c.qte})" style="font-size:10px;padding:3px 8px;border-radius:10px;background:var(--bg3);border:1px solid var(--border2);cursor:pointer;color:var(--text)">+ ${esc(c.nom)}</span>`).join('')+'</div>':''}
     </div>`).join('');
@@ -5616,4 +5617,9 @@ body{min-height:100vh;background-color:#07162b;background-image:url("background-
   #login-screen .login-card{max-width:calc(100vw - 28px)!important;}
 }
 </style><script src="./sms-clients.js"></script></body></html>
-<style id="stock-photo-large">.mcard-product-photo{display:block;width:100%;height:230px;object-fit:contain;object-position:center;background:rgba(255,255,255,.96);border-radius:14px;margin:0 0 15px;padding:8px;box-sizing:border-box}@media(max-width:700px){.mcard-photo-gallery{grid-template-rows:210px 104px}.mcard-product-photo{height:220px}}</style>
+<style id="stock-photo-large">.mcard-product-photo{display:block;width:100%;height:230px;object-fit:contain;object-position:center;background:rgba(255,255,255,.96);border-radius:14px;margin:0 0 15px;padding:8px;box-sizing:border-box}@media(max-width:700px){.mcard-photo-gallery{grid-template-rows:210px 104px}.mcard-product-photo{height:220px}}
+/* Optimisations de fluidité : rendu différé des zones hors écran et médias */
+img{content-visibility:auto}
+.mcard-product-photo,.mcard-gallery-cell img{decode:async}
+.mcard-photo-gallery{contain:layout paint style}
+</style>
