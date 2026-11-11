@@ -1871,32 +1871,42 @@ function markAllRead(){document.getElementById('alerts-list').innerHTML='<div cl
 // Photo produit : aperçu et stockage local dans les données de l'application
 let currentProduitPhoto='';
 function previewProduitPhoto(input){
-  const file=input.files&&input.files[0];if(!file)return;
-  const LIMITE_PHOTO_PRODUIT=8*1024*1024; // fichier source max 8 Mo ; l'image est ensuite compressée (~100 Ko)
-  if(!file.type.startsWith('image/')){
-    toast('Veuillez choisir un fichier image','error');input.value='';return;
+  const file=input&&input.files&&input.files[0];if(!file)return;
+  const maxSource=10*1024*1024;
+  const allowed=['image/jpeg','image/png','image/webp','image/gif'];
+  const ext=(file.name||'').toLowerCase().split('.').pop();
+  const mime=file.type||({jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',gif:'image/gif'}[ext]||'');
+  if(!allowed.includes(mime)){
+    toast('Format non pris en charge. Utilisez JPG, PNG ou WEBP.','error');input.value='';return;
   }
-  if(file.size>LIMITE_PHOTO_PRODUIT){
-    toast('Photo refusée : 8 Mo maximum avant compression.','error');
-    input.value='';return;
+  if(!file.size||file.size>maxSource){
+    toast('Image vide ou trop volumineuse : 10 Mo maximum avant compression.','error');input.value='';return;
   }
   const reader=new FileReader();
-  reader.onload=e=>{
+  reader.onerror=()=>{toast('Lecture de la photo impossible. Réessayez.','error');input.value='';};
+  reader.onload=()=>{
     const img=new Image();
+    img.onerror=()=>{toast('Image illisible. Essayez une image JPG, PNG ou WEBP.','error');input.value='';};
     img.onload=()=>{
       try{
-        const MAX=720,r=Math.min(1,MAX/Math.max(img.width,img.height));
-        const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.width*r));c.height=Math.max(1,Math.round(img.height*r));
-        const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);
-        let q=.8,out=c.toDataURL('image/jpeg',q);
-        while(out.length>180000&&q>.4){q-=.1;out=c.toDataURL('image/jpeg',q);}
-        currentProduitPhoto=out;renderProduitPhotoPreview();
-      }catch(err){toast('Compression impossible : '+err.message,'error');input.value='';}
+        if(!img.naturalWidth||!img.naturalHeight)throw new Error('Dimensions d’image invalides');
+        const maxSide=640,ratio=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.max(1,Math.round(img.naturalWidth*ratio));
+        canvas.height=Math.max(1,Math.round(img.naturalHeight*ratio));
+        const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas indisponible');
+        ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        let quality=.78,output=canvas.toDataURL('image/jpeg',quality);
+        while(output.length>125000&&quality>.38){quality=Math.max(.38,quality-.08);output=canvas.toDataURL('image/jpeg',quality);}
+        if(!output||output==='data:,')throw new Error('Conversion de la photo impossible');
+        if(output.length>160000)throw new Error('Photo encore trop volumineuse après compression');
+        currentProduitPhoto=output;renderProduitPhotoPreview();
+        toast('Photo ajoutée avec succès','success');
+      }catch(err){console.error('Photo produit:',err);toast('Impossible de traiter cette photo : '+(err.message||'erreur inconnue'),'error');input.value='';}
     };
-    img.onerror=()=>{toast('Image illisible. Essayez un autre fichier.','error');input.value='';};
-    img.src=e.target.result;
+    img.src=reader.result;
   };
-  reader.onerror=()=>{toast('Impossible de lire cette photo. Réessayez.','error');input.value='';};
   reader.readAsDataURL(file);
 }
 function renderProduitPhotoPreview(){
