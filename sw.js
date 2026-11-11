@@ -1,5 +1,5 @@
 /* ETS KOÏVOGUI ET FRÈRE — service worker (réseau d'abord, cache en secours) */
-const VERSION = 'koivogui-mobile-bg-v3';
+const VERSION = 'koivogui-mobile-bg-v4-images';
 const CORE = ['./', './index.html', './manifest.webmanifest', './background-boissons.jpg', './qrcode-local.js', './sms-clients.js', './icon-192.png', './icon-512.png', './icon-maskable-192.png', './icon-maskable-512.png'];
 // APIs temps réel : jamais interceptées
 const BYPASS = ['firestore.googleapis.com', 'identitytoolkit.googleapis.com', 'securetoken.googleapis.com', 'firebaseinstallations.googleapis.com'];
