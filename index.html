@@ -1364,7 +1364,9 @@ function refreshVerifiedProductPhotos(){
     if(!p.code || !p.code.startsWith('BR-') && !p.code.startsWith('AL-') &&
        !p.code.startsWith('JU-') && !p.code.startsWith('EN-')) return;
     const desired=VERIFIED_GN_PRODUCT_PHOTOS[p.code]||'';
-    if(p.photo!==desired){p.photo=desired;changed=true;}
+    // Ne jamais écraser une photo téléversée par l'utilisateur (data:) ni effacer une photo existante
+    const mine=typeof p.photo==='string'&&p.photo.startsWith('data:');
+    if(!mine&&desired&&p.photo!==desired){p.photo=desired;changed=true;}
     // Guini est une boisson gazeuse, pas une bière.
     if(p.code==='BR-GUINI' && p.categorie!=='sodas'){p.categorie='sodas';changed=true;}
   });
