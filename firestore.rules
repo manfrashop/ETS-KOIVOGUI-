@@ -1,48 +1,110 @@
 rules_version = '2';
-// ETS KOÏVOGUI ET FRÈRE — règles Firestore (à publier dans le projet Firebase du client)
-// Modèle : seuls les comptes listés dans members/{uid} accèdent aux données.
-// Le PREMIER utilisateur qui se connecte à l'app (aucun admin défini) devient
-// administrateur via un lot atomique (config/bootstrap + admins + members), une seule fois.
-// Ensuite, l'écran Utilisateurs crée / désactive les comptes (members) et gère admins.
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isAuth()  { return request.auth != null; }
-    function signedIn() { return isAuth() && exists(/databases/$(database)/documents/members/$(request.auth.uid)); }
-    function isAdmin()  { return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
-    function bootstrapOpen() { return !exists(/databases/$(database)/documents/config/bootstrap); }
-    function claimingBootstrap(uid) {
-      return isAuth() && request.auth.uid == uid && bootstrapOpen()
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isMember() {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/members/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return isMember()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function bootstrapIsOpen() {
+      return !exists(/databases/$(database)/documents/config/bootstrap);
+    }
+
+    function isClaimingFirstAdmin(uid) {
+      return isAuthenticated()
+        && request.auth.uid == uid
+        && bootstrapIsOpen()
         && existsAfter(/databases/$(database)/documents/config/bootstrap)
         && getAfter(/databases/$(database)/documents/config/bootstrap).data.uid == uid;
     }
 
-    // Verrou d'amorçage : créable une seule fois, par le futur premier admin
+    function validAccountData() {
+      return request.resource.data.keys().hasOnly(['email', 'nom'])
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 3
+        && (!('nom' in request.resource.data)
+          || (request.resource.data.nom is string
+            && request.resource.data.nom.size() <= 120));
+    }
+
+    // Initialisation atomique : le premier compte authentifié devient admin.
+    // Le document bootstrap est définitif et ne peut jamais être remplacé.
     match /config/bootstrap {
-      allow read: if isAuth();
-      allow create: if isAuth() && bootstrapOpen() && request.resource.data.uid == request.auth.uid;
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && bootstrapIsOpen()
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'at'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email is string;
       allow update, delete: if false;
     }
-    // Comptes autorisés (retirer un doc = désactiver le compte)
+
+    // Un compte désactivé perd immédiatement son accès lorsque son document
+    // members/{uid} est supprimé par un administrateur.
     match /members/{uid} {
-      allow read: if isAuth() && request.auth.uid == uid;
-      allow create: if isAdmin() || claimingBootstrap(uid);
-      allow update, delete: if isAdmin();
+      allow read: if isAuthenticated() && request.auth.uid == uid;
+      allow create: if (isAdmin() || isClaimingFirstAdmin(uid))
+        && validAccountData();
+      allow update: if isAdmin() && validAccountData();
+      allow delete: if isAdmin() && uid != request.auth.uid;
     }
-    // Administrateurs
+
+    // Seul un administrateur existant peut accorder ou retirer le rôle admin.
     match /admins/{uid} {
-      allow read: if isAuth() && request.auth.uid == uid;
-      allow create: if isAdmin() || claimingBootstrap(uid);
-      allow update, delete: if isAdmin();
+      allow read: if isAuthenticated() && request.auth.uid == uid;
+      allow create: if (isAdmin() || isClaimingFirstAdmin(uid))
+        && validAccountData();
+      allow update: if isAdmin() && validAccountData();
+      allow delete: if isAdmin() && uid != request.auth.uid;
     }
-    // Profils / rôles applicatifs
+
+    // Profils applicatifs : lecture des membres, écriture réservée aux admins.
     match /utilisateurs/{id} {
-      allow read: if signedIn();
-      allow write: if isAdmin();
+      allow read: if isMember();
+      allow create, update, delete: if isAdmin();
     }
-    // Données métier : lecture/création/modification par les membres, suppression par les admins
-    match /{col}/{id} {
-      allow read, create, update: if signedIn() && col in ['produits','mouvements','ventes','commandes','fournisseurs','clients','depenses','retours','categories','journal','_ops'];
-      allow delete: if isAdmin() && col in ['produits','mouvements','ventes','commandes','fournisseurs','clients','depenses','retours','categories','journal'];
+
+    // Journal technique des opérations idempotentes de stock.
+    // L'application ne crée que des marqueurs d'incrément de stock produit.
+    match /_ops/{opId} {
+      allow read: if isMember();
+      allow create: if isMember()
+        && request.resource.data.keys().hasOnly(['t', 'id', 'exp'])
+        && request.resource.data.t == 'produits'
+        && request.resource.data.id is string
+        && request.resource.data.exp is timestamp;
+      allow update, delete: if false;
     }
+
+    // Données métier utilisées par l'application.
+    // Les membres actifs peuvent lire, créer et modifier les données.
+    // La suppression reste réservée aux administrateurs.
+    match /{collection}/{document} {
+      allow read, create, update: if isMember()
+        && collection in [
+          'produits', 'mouvements', 'ventes', 'commandes',
+          'fournisseurs', 'clients', 'depenses', 'retours',
+          'categories', 'journal'
+        ];
+      allow delete: if isAdmin()
+        && collection in [
+          'produits', 'mouvements', 'ventes', 'commandes',
+          'fournisseurs', 'clients', 'depenses', 'retours',
+          'categories', 'journal'
+        ];
+    }
+
+    // Tout chemin ou collection non explicitement autorisé est refusé.
   }
 }

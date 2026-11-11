@@ -1,0 +1,26 @@
+AUDIT FIRESTORE — KOIVOGUI FLUIDE-9
+
+Fichier de règles : firestore.rules
+
+Corrections apportées :
+- Fonctions d'accès simplifiées et cohérentes : utilisateur authentifié, membre actif et administrateur.
+- Bootstrap du premier administrateur limité à une création unique liée à l'UID authentifié.
+- Format des documents members et admins contrôlé (email/nom uniquement).
+- Un administrateur ne peut pas supprimer son propre accès admin ou son document membre depuis ces règles.
+- Collection _ops isolée : lecture membre, création limitée aux marqueurs d'incrément de stock des produits, aucune modification/suppression.
+- Collections métier explicitement autorisées ; les autres collections restent refusées.
+- Suppression des données métier réservée aux administrateurs.
+
+Compatibilité attendue avec le code inspecté :
+- Bootstrap écrit config/bootstrap, admins/{uid} et members/{uid} dans un lot.
+- Gestion des utilisateurs crée/supprime members et admins.
+- Synchronisation stock lit/écrit les collections métier et crée un document _ops par opération.
+
+IMPORTANT AVANT PUBLICATION :
+1. Ouvrir Firebase Console > Firestore Database > Règles.
+2. Faire une copie des règles actuelles.
+3. Remplacer le contenu par firestore.rules et publier.
+4. Tester avec un compte administrateur et un compte membre non-admin.
+5. Vérifier : connexion, lecture/écriture produits, mouvements, ventes, création/désactivation d'utilisateur et incrément de stock.
+
+Limite de l'audit : les règles ont été examinées statiquement avec le code fourni. Elles n'ont pas été exécutées dans Firebase Emulator ni publiées dans votre projet Firebase. Les autorisations métier sont conservées comme dans la version précédente : tout membre actif peut lire/créer/modifier les données métier ; seuls les admins peuvent les supprimer.
