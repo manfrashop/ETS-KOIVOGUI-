@@ -1,0 +1,42 @@
+KOIVOGUI FLUIDE-11 — AUDIT ET CORRECTIONS
+========================================
+
+SOURCE
+- Archive de départ : KOIVOGUI_FLUIDE-10_MOT_DE_PASSE_RAPIDE.zip
+- Application : ETS KOÏVOGUI ET FRÈRE / HABATECH
+
+CORRECTIONS APPLIQUÉES
+1. Connexion Cloud non bloquante après authentification :
+   - Firebase Auth valide d'abord les identifiants.
+   - Le compte membre et le rôle sont vérifiés.
+   - Le tableau de bord s'ouvre ensuite sans attendre le téléchargement complet.
+   - loadAll() affiche le cache local et lance la synchronisation Firestore en arrière-plan.
+   - Le chargement Cloud synchrone redondant dans doLogin() a été supprimé.
+2. Protection contre les doubles clics sur « Se connecter » : bouton désactivé pendant la tentative, état rétabli en fin de traitement.
+3. Contrôle du rôle administrateur : le rôle admin de session est confirmé par l'existence de admins/{uid}, plutôt que par le seul profil applicatif.
+4. Sessions Cloud : la restauration basée uniquement sur sessionStorage est désactivée en mode Cloud ; les données de session Cloud ne sont plus réécrites dans sessionStorage. Une authentification Firebase est exigée après rechargement.
+5. Mot de passe : remplacement des boîtes prompt() pour les changements/réinitialisations par une boîte intégrée avec bouton œil afficher/masquer.
+6. Les champs type=password créés dynamiquement continuent à recevoir automatiquement leur bouton œil.
+7. CSS final replacé à l'intérieur du document HTML ; retrait d'une déclaration CSS invalide (decode:async).
+8. Cache PWA versionné en v5 pour forcer l'actualisation des fichiers après publication.
+
+VALIDATIONS STATIQUES EFFECTUÉES
+- Archive ZIP d'entrée ouverte et extraite sans erreur.
+- Syntaxe vérifiée pour tous les scripts JavaScript inline avec Node.js --check.
+- Archive de sortie vérifiée après création (test ZIP CRC).
+- Vérification statique des changements de connexion, de session et de saisie des mots de passe.
+
+LIMITES / ACTIONS QUI RESTENT À FAIRE
+- Aucune connexion à la console Firebase du propriétaire n'a été effectuée.
+- Les règles firestore.rules n'ont pas été publiées ni testées dans Firebase Emulator.
+- Les règles actuelles autorisent encore tout membre actif à lire/créer/modifier les collections métier listées ; seules les suppressions sont réservées aux admins. Une matrice de droits caissier/magasinier/admin doit être validée avant de restreindre les écritures afin de ne pas casser les opérations.
+- L'activation/désactivation des comptes, les opérations de stock, les ventes et les conflits multi-appareils doivent être testés dans le vrai projet Firebase.
+- La clé Anthropic utilisée côté navigateur doit être déplacée derrière un service serveur/proxy avant un usage de production ; ne pas considérer une clé enregistrée dans le navigateur comme secrète.
+- Le temps réel de connexion dépend aussi du réseau mobile, du projet Firebase et du volume de données. Le gain de fluidité doit être confirmé sur l'appareil cible.
+
+CONSEIL DE MISE EN SERVICE
+1. Faire une sauvegarde locale et Cloud avant remplacement.
+2. Publier l'ensemble des fichiers du dossier, pas seulement index.html.
+3. Sur le téléphone, fermer complètement l'application/PWA puis la rouvrir afin de charger le nouveau service worker.
+4. Tester avec un compte admin, un caissier et un magasinier : connexion, affichage du tableau de bord, ventes, mouvements, inventaire, synchronisation et déconnexion.
+5. Ne pas publier de nouvelles règles Firestore avant validation des droits attendus par module.

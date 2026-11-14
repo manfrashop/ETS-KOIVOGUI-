@@ -1090,7 +1090,7 @@ function openLoginCloudModal(){toast('La configuration Firebase se gère dans Ad
 function buildQuickCloudModal(){const div=document.createElement('div');div.className='overlay';div.id='m-cloud-quick';div.onclick=e=>{if(e.target===div)div.classList.remove('open');};div.innerHTML=`<div class="modal" style="max-width:460px"><div class="modal-head"><h3>🔥 Configuration Firebase / Firestore</h3><span class="modal-close" onclick="document.getElementById('m-cloud-quick').classList.remove('open')">×</span></div><div class="modal-body"><p style="font-size:12px;color:var(--text3);margin-bottom:16px;line-height:1.5">Collez la configuration Web JSON de votre projet Firebase.</p><div class="fgrp"><label>Configuration Firebase — JSON</label><textarea id="qcfg-json" rows="8" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","appId":"..."}'></textarea></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-outline btn-sm" onclick="testQuickCloud()">🔌 Tester</button><button class="btn btn-primary btn-sm" onclick="saveQuickCloud()">💾 Sauvegarder</button></div><div id="qcfg-st" style="margin-top:10px;font-size:12px;color:var(--text3)"></div></div><div class="modal-foot"><button class="btn btn-outline" onclick="document.getElementById('m-cloud-quick').classList.remove('open')">Fermer</button></div></div>`;document.body.appendChild(div);}
 async function testQuickCloud(){const st=document.getElementById('qcfg-st');try{const c=readFirebaseJson(document.getElementById('qcfg-json')?.value||'');initFirebase(c);await firestoreDB.collection('produits').limit(1).get();FB_CONFIG=c;st.innerHTML='<span style="color:var(--green)">✅ Firestore accessible. Vérifiez les règles de sécurité.</span>';}catch(e){st.innerHTML='<span style="color:var(--red)">❌ '+e.message+'</span>';}}
 function saveQuickCloud(){try{FB_CONFIG=readFirebaseJson(document.getElementById('qcfg-json')?.value||'');localStorage.setItem('firebase_config',JSON.stringify(FB_CONFIG));initFirebase();loadFirebaseConfig();toast('Configuration Firebase enregistrée','success');setTimeout(()=>document.getElementById('m-cloud-quick')?.classList.remove('open'),1000);}catch(e){toast(e.message,'error');}}
-async function switchMode(mode){if(mode===ACCESS_MODE)return;if(mode==='cloud'){try{if(!firebaseReady())throw new Error('Configurez Firebase dans Administration.');if(!sb)initFirebase();showSync('Connexion à Firebase…','Chargement Firestore…');await firestoreDB.collection('produits').limit(1).get();ACCESS_MODE='cloud';localStorage.setItem('access_mode','cloud');await syncFromCloud();hideSync();updateModeUI();toast('☁️ Mode Cloud activé — Firestore connecté','success');logAction('UPDATE','Basculement en mode Cloud');}catch(e){hideSync();toast('Erreur Firebase : '+e.message,'error');}}else{ACCESS_MODE='local';localStorage.setItem('access_mode','local');sb=null;updateModeUI();toast('💾 Mode Local activé','info');logAction('UPDATE','Basculement en mode Local');rdAll();updateKPIs();computeAlerts();}}
+async function switchMode(mode){if(mode===ACCESS_MODE)return;if(mode==='cloud'){try{if(!firebaseReady())throw new Error('Configurez Firebase dans Administration.');if(!sb)initFirebase();showSync('Connexion à Firebase…','Chargement Firestore…');await firestoreDB.collection('produits').limit(1).get();ACCESS_MODE='cloud';localStorage.setItem('access_mode','cloud');hideSync();updateModeUI();syncFromCloud().catch(e=>toast('Synchronisation cloud en arrière-plan : '+e.message,'warning'));toast('☁️ Mode Cloud activé — Firestore connecté','success');logAction('UPDATE','Basculement en mode Cloud');}catch(e){hideSync();toast('Erreur Firebase : '+e.message,'error');}}else{ACCESS_MODE='local';localStorage.setItem('access_mode','local');sb=null;updateModeUI();toast('💾 Mode Local activé','info');logAction('UPDATE','Basculement en mode Local');rdAll();updateKPIs();computeAlerts();}}
 function updateModeUI(){const isCloud=ACCESS_MODE==='cloud';const pill=document.getElementById('mode-pill');if(pill){pill.textContent=isCloud?'☁️ Cloud':'💾 Local';pill.className=isCloud?'cloud':'local';}const tl=document.getElementById('tb-mode-local'),tc=document.getElementById('tb-mode-cloud');if(tl)tl.className='mode-btn'+(isCloud?'':' active-local');if(tc)tc.className='mode-btn'+(isCloud?' active-cloud':'');const banner=document.getElementById('cfg-banner');if(banner)banner.classList.toggle('hidden',isCloud||firebaseReady()||ACCESS_MODE==='local');const lbl=document.getElementById('sse-lbl');if(lbl)lbl.textContent=isCloud?'Firestore OK':'Local';}
 function showSync(msg,sub=''){document.getElementById('sync-msg').textContent=msg;document.getElementById('sync-sub').textContent=sub;document.getElementById('sync-overlay').classList.add('open');}function hideSync(){document.getElementById('sync-overlay').classList.remove('open');}
 async function pushToCloud(){if(!sb||ACCESS_MODE!=='cloud'){toast('Mode Cloud requis','warning');return;}showSync('Envoi vers Firestore…','Synchronisation en cours…');try{for(const t of ['produits','mouvements','ventes','commandes','fournisseurs','clients','depenses','retours'])if(D[t]&&D[t].length)await sb.from(t).upsert(D[t],{onConflict:'id'});OUT=[];saveOut();rebuildSnap();hideSync();toast('✅ Données envoyées vers Firestore','success');logAction('UPDATE','Push local → Firestore réussi');}catch(e){hideSync();toast('Erreur sync : '+e.message,'error');}}
@@ -1225,16 +1225,75 @@ addEventListener('pagehide',()=>{_dirty.forEach(enqueueDiff);_dirty.clear();save
 setInterval(()=>{if(ACCESS_MODE==='cloud'&&sb&&OUT.length&&navigator.onLine!==false)flushOutbox();},60000);setInterval(syncBadge,15000);
 /*END-SYNC-ENGINE-V2*/
 function setDemo(e,p){document.getElementById('l-email').value=e;document.getElementById('l-pass').value=p;}
-async function doLogin(){try{const em=document.getElementById('l-email').value.trim(),pw=document.getElementById('l-pass').value;if(!em||!pw){toast('Remplissez tous les champs','error');return;}if(ACCESS_MODE==='cloud'){try{if(!sb){if(!firebaseReady())throw new Error('Configurez Firebase pour le mode Cloud.');initFirebase();}showSync('Authentification Firebase…','');const{data,error}=await sb.auth.signInWithPassword({email:em,password:pw});if(error)throw error;let _boot=false;{const _uid=data.user.uid,_mb=await firestoreDB.collection('members').doc(_uid).get();
-if(!_mb.exists){const _bs=await firestoreDB.collection('config').doc('bootstrap').get();
-if(_bs.exists){await sb.auth.signOut();hideSync();toast('Compte non autorisé : demandez à un administrateur de vous créer','error');return;}
-hideSync();if(!confirm('Aucun administrateur n\'est encore défini.\nDevenir administrateur de ce système avec '+em+' ?')){await sb.auth.signOut();return;}
-showSync('Création du premier administrateur…','');const _b=firestoreDB.batch();const _d=firestoreDB.collection.bind(firestoreDB);
-_b.set(_d('config').doc('bootstrap'),{uid:_uid,email:em,at:new Date().toISOString()});_b.set(_d('admins').doc(_uid),{email:em});_b.set(_d('members').doc(_uid),{email:em});await _b.commit();_boot=true;}}
-const pr=await sb.from('utilisateurs').select('*').eq('email',em).single();CU=pr.data||(_boot?{nom:em.split('@')[0],role:'admin',email:em,uid:firebaseAuth.currentUser.uid,statut:'actif'}:{nom:em,role:'caissier',email:em});if((CU.statut||'actif')==='inactif'){await sb.auth.signOut();CU=null;hideSync();toast('Compte désactivé : contactez un administrateur','error');return;}await syncFromCloud();if(_boot&&!D.utilisateurs.some(u=>String(u.email||'').toLowerCase()===em.toLowerCase())){D.utilisateurs.push({id:nid('utilisateurs'),nom:CU.nom,email:em,role:'admin',statut:'actif',uid:CU.uid});sv('db_u','utilisateurs');try{syncSoon('utilisateurs');}catch(_){}}hideSync();afterLogin();return;}catch(e){hideSync();toast('Erreur cloud : '+e.message,'error');return;}}const d=ALLOW_DEMO?DEMOS.find(u=>u.email===em&&u.pass===pw):null;if(d){CU=d;afterLogin();return;}const lu_=await localLogin(em,pw);if(lu_){CU=lu_;afterLogin();return;}toast('Identifiants incorrects','error');}catch(e){toast('Erreur : '+e.message,'error');}}
+let _loginBusy=false;
+async function doLogin(){
+  if(_loginBusy)return;
+  const btn=document.querySelector('#login-screen button[onclick="doLogin()"]');
+  const em=(document.getElementById('l-email')?.value||'').trim();
+  const pw=document.getElementById('l-pass')?.value||'';
+  if(!em||!pw){toast('Remplissez tous les champs','error');return;}
+  _loginBusy=true;
+  if(btn){btn.disabled=true;btn.dataset.oldText=btn.textContent;btn.textContent='Connexion en cours…';btn.style.opacity='.75';}
+  try{
+    if(ACCESS_MODE==='cloud'){
+      try{
+        if(!sb){if(!firebaseReady())throw new Error('Configurez Firebase pour le mode Cloud.');initFirebase();}
+        showSync('Authentification Firebase…','Vérification du compte…');
+        const {data,error}=await sb.auth.signInWithPassword({email:em,password:pw});
+        if(error)throw error;
+        const uid=data.user.uid;
+        const memberRef=firestoreDB.collection('members').doc(uid);
+        const member=await memberRef.get();
+        let boot=false;
+        if(!member.exists){
+          const bootstrap=await firestoreDB.collection('config').doc('bootstrap').get();
+          if(bootstrap.exists){await sb.auth.signOut();hideSync();toast('Compte non autorisé : demandez à un administrateur de vous créer','error');return;}
+          hideSync();
+          if(!confirm('Aucun administrateur n\'est encore défini.\nDevenir administrateur de ce système avec '+em+' ?')){await sb.auth.signOut();return;}
+          showSync('Création du premier administrateur…','');
+          const batch=firestoreDB.batch();
+          batch.set(firestoreDB.collection('config').doc('bootstrap'),{uid,email:em,at:new Date().toISOString()});
+          batch.set(firestoreDB.collection('admins').doc(uid),{email:em});
+          batch.set(memberRef,{email:em});
+          await batch.commit();boot=true;
+        } else if((member.data()?.statut||'actif')==='inactif'){
+          await sb.auth.signOut();hideSync();toast('Compte désactivé : contactez un administrateur','error');return;
+        }
+        // Le rôle administrateur provient du document protégé admins/{uid},
+        // et non uniquement d'une valeur de rôle stockée dans le navigateur.
+        const [adminDoc,profileResult]=await Promise.all([
+          firestoreDB.collection('admins').doc(uid).get(),
+          sb.from('utilisateurs').select('*').eq('email',em).single()
+        ]);
+        const profile=profileResult.data||null;
+        CU=profile||{nom:em.split('@')[0],role:'caissier',email:em,uid};
+        CU.email=CU.email||em;CU.uid=uid;
+        if(adminDoc.exists)CU.role='admin';
+        else if(!['caissier','magasinier'].includes(CU.role))CU.role='caissier';
+        if(boot){CU.role='admin';CU.statut='actif';}
+        if((CU.statut||'actif')==='inactif'){await sb.auth.signOut();CU=null;hideSync();toast('Compte désactivé : contactez un administrateur','error');return;}
+        hideSync();
+        // Accès immédiat : loadAll() affiche le cache local puis synchronise
+        // Firestore en arrière-plan, sans bloquer l'ouverture du tableau de bord.
+        afterLogin();
+        return;
+      }catch(e){hideSync();toast('Erreur cloud : '+(e.message||'Connexion impossible'),'error');return;}
+    }
+    const demo=ALLOW_DEMO?DEMOS.find(u=>u.email===em&&u.pass===pw):null;
+    if(demo){CU=demo;afterLogin();return;}
+    const localUser=await localLogin(em,pw);
+    if(localUser){CU=localUser;afterLogin();return;}
+    toast('Identifiants incorrects','error');
+  }catch(e){hideSync();toast('Erreur : '+(e.message||e),'error');}
+  finally{
+    _loginBusy=false;
+    if(btn){btn.disabled=false;btn.textContent=btn.dataset.oldText||'🔐 Se connecter';btn.style.opacity='';delete btn.dataset.oldText;}
+  }
+}
 let _sessT=0;
-function saveSess(force){if(!CU)return;const n=Date.now();if(!force&&n-_sessT<5000)return;_sessT=n;try{sessionStorage.setItem('ets_sess',JSON.stringify({u:CU,t:n}));}catch(e){}}
+function saveSess(force){if(!CU)return;if(ACCESS_MODE==='cloud'){try{sessionStorage.removeItem('ets_sess');}catch(e){}return;}const n=Date.now();if(!force&&n-_sessT<5000)return;_sessT=n;try{sessionStorage.setItem('ets_sess',JSON.stringify({u:CU,t:n}));}catch(e){}}
 function restoreSession(){
+  if(ACCESS_MODE==='cloud'){try{sessionStorage.removeItem('ets_sess');}catch(e){}return;}
   let s=null;try{s=JSON.parse(sessionStorage.getItem('ets_sess')||'null');}catch(e){}
   if(!s||!s.u||!s.u.nom||Date.now()-s.t>TIMEOUT){try{sessionStorage.removeItem('ets_sess');}catch(e){}return;}
   CU=s.u;afterLogin(true);
@@ -1452,13 +1511,15 @@ function autoRef(prefix,table){
 }
 
 async function loadAll(){
-  if(ACCESS_MODE==='cloud'&&sb){
-    try{await syncFromCloud();}catch(e){toast('Erreur sync Cloud: '+e.message,'warning');}
-  }
+  // Afficher immédiatement les données locales en cache : l'utilisateur n'attend
+  // plus la fin de tous les appels Firestore pour accéder au système.
   seedDefaultGnBeverages();
   refreshVerifiedProductPhotos();
   updateModeUI();
   recalcEtats();rdAll();computeAlerts();updateKPIs();initDashCharts();populateSQL();
+  if(ACCESS_MODE==='cloud'&&sb){
+    syncFromCloud().catch(e=>toast('Synchronisation cloud en arrière-plan : '+e.message,'warning'));
+  }
   // Initialiser les dates de la section Rapports
   const todayR=new Date().toISOString().slice(0,10);
   const fEl=document.getElementById('rpt-date-from'),tEl=document.getElementById('rpt-date-to');
@@ -2549,10 +2610,10 @@ async function userResetMail(id){
 async function myPassword(){
   if(ACCESS_MODE!=='cloud'&&typeof localChangePassword==='function'){localChangePassword();return;}
   if(!_cloudOn()||!firebaseAuth.currentUser){toast('Disponible en mode Cloud, connecté','warning');return;}
-  const old=prompt('Mot de passe actuel :');if(!old)return;
-  const nw=prompt('Nouveau mot de passe (6 caractères min.) :');if(!nw)return;
+  const old=await askPasswordWithEye('Mot de passe actuel :');if(old===null)return;
+  const nw=await askPasswordWithEye('Nouveau mot de passe (6 caractères min.) :');if(nw===null)return;
   if(nw.length<6){toast('6 caractères minimum','error');return;}
-  if(nw!==prompt('Confirmez le nouveau mot de passe :')){toast('Les mots de passe diffèrent','error');return;}
+  const confirmPw=await askPasswordWithEye('Confirmez le nouveau mot de passe :');if(confirmPw===null)return;if(nw!==confirmPw){toast('Les mots de passe diffèrent','error');return;}
   try{const usr=firebaseAuth.currentUser;
     await usr.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(usr.email,old));
     await usr.updatePassword(nw);toast('Mot de passe modifié','success');
@@ -5268,22 +5329,22 @@ window.localLogin=function(em,pw){
     });
   });
 };
-window.localChangePassword=function(){
+window.localChangePassword=async function(){
   if(!CU){return;}
   var em=String(CU.email||'').toLowerCase(),a=lu(),acc=a.find(function(x){return x.email===em;});
   if(!acc){toast('Compte démo : mot de passe non modifiable','warning');return;}
-  var old=prompt('Mot de passe actuel :');if(!old)return;
-  var nw=prompt('Nouveau mot de passe (6 caractères min.) :');if(!nw)return;
+  var old=await askPasswordWithEye('Mot de passe actuel :');if(old===null)return;
+  var nw=await askPasswordWithEye('Nouveau mot de passe (6 caractères min.) :');if(nw===null)return;
   if(nw.length<6){toast('6 caractères minimum','error');return;}
-  if(nw!==prompt('Confirmez le nouveau mot de passe :')){toast('Les mots de passe diffèrent','error');return;}
+  const confirmPw=await askPasswordWithEye('Confirmez le nouveau mot de passe :');if(confirmPw===null)return;if(nw!==confirmPw){toast('Les mots de passe diffèrent','error');return;}
   pbk(old,unb64(acc.salt),acc.it).then(function(h){
     if(h!==acc.hash){toast('Mot de passe actuel incorrect','error');return;}
     return mk(em,acc.nom,acc.role,nw).then(function(n){a=a.map(function(x){return x.email===em?n:x;});slu(a);toast('Mot de passe modifié','success');});
   }).catch(function(e){toast('Échec : '+e.message,'error');});
 };
-window.localResetPassword=function(id){
+window.localResetPassword=async function(id){
   var u=D.utilisateurs.find(function(x){return +x.id===+id;});if(!u||!u.email)return;
-  var nw=prompt('Nouveau mot de passe pour '+u.email+' (6 caractères min.) :');if(!nw)return;
+  var nw=await askPasswordWithEye('Nouveau mot de passe pour '+u.email+' (6 caractères min.) :');if(nw===null)return;
   if(nw.length<6){toast('6 caractères minimum','error');return;}
   localAddAccount(u.email,u.nom,u.role,nw).then(function(){toast('Mot de passe de '+u.email+' réinitialisé','success');}).catch(function(e){toast('Échec : '+e.message,'error');});
 };
@@ -5664,10 +5725,66 @@ body{min-height:100vh;background-color:#07162b;background-image:url("background-
   #login-screen{background-position:center center!important;background-size:auto 100dvh!important;}
   #login-screen .login-card{max-width:calc(100vw - 28px)!important;}
 }
-</style><script src="./sms-clients.js"></script></body></html>
+</style><script src="./sms-clients.js"></script>
+<style>
+/* Champs sensibles avec bouton de visualisation */
+.password-eye-wrap{position:relative!important;display:block!important;width:100%;}
+.password-eye-wrap>input{width:100%!important;padding-right:46px!important;box-sizing:border-box!important;}
+.password-eye-btn{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:34px;height:34px;border:0;border-radius:9px;background:transparent;color:var(--text2,#64748b);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;z-index:3;padding:0;}
+.password-eye-btn:hover{background:var(--bg3,rgba(120,140,160,.14));color:var(--accent,#2563eb);}
+.password-eye-btn:focus-visible{outline:2px solid var(--accent,#2563eb);outline-offset:2px;}
+</style>
+<script>
+// Boîte de dialogue de saisie sécurisée avec visualisation du mot de passe.
+function askPasswordWithEye(label){
+  return new Promise(function(resolve){
+    var overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(2,8,23,.72);display:flex;align-items:center;justify-content:center;padding:18px;';
+    var card=document.createElement('div');
+    card.style.cssText='width:min(420px,100%);background:var(--card,#fff);color:var(--text,#0f172a);border:1px solid var(--border,#cbd5e1);border-radius:16px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.35);';
+    var title=document.createElement('div');title.textContent=label;title.style.cssText='font-weight:800;font-size:15px;margin-bottom:14px;';
+    var wrap=document.createElement('div');wrap.style.cssText='position:relative;';
+    var input=document.createElement('input');input.type='password';input.autocomplete='current-password';input.style.cssText='width:100%;box-sizing:border-box;padding:12px 50px 12px 12px;border:1px solid var(--border,#cbd5e1);border-radius:10px;background:var(--bg,#fff);color:var(--text,#0f172a);font-size:16px;';
+    var eye=document.createElement('button');eye.type='button';eye.textContent='👁';eye.setAttribute('aria-label','Afficher le mot de passe');eye.style.cssText='position:absolute;right:6px;top:5px;width:38px;height:38px;border:0;border-radius:8px;background:transparent;cursor:pointer;font-size:19px;';
+    eye.onclick=function(){input.type=input.type==='password'?'text':'password';eye.setAttribute('aria-label',input.type==='password'?'Afficher le mot de passe':'Masquer le mot de passe');};
+    var actions=document.createElement('div');actions.style.cssText='display:flex;justify-content:flex-end;gap:9px;margin-top:16px;';
+    var cancel=document.createElement('button');cancel.type='button';cancel.textContent='Annuler';cancel.style.cssText='padding:10px 14px;border:1px solid var(--border,#cbd5e1);border-radius:9px;background:transparent;color:inherit;font-weight:700;';
+    var ok=document.createElement('button');ok.type='button';ok.textContent='Valider';ok.style.cssText='padding:10px 16px;border:0;border-radius:9px;background:var(--accent,#2563eb);color:#fff;font-weight:800;';
+    var done=false;function finish(value){if(done)return;done=true;overlay.remove();resolve(value);}
+    cancel.onclick=function(){finish(null);};ok.onclick=function(){finish(input.value);};
+    input.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();ok.click();}if(e.key==='Escape')cancel.click();});
+    overlay.addEventListener('click',function(e){if(e.target===overlay)cancel.click();});
+    wrap.appendChild(input);wrap.appendChild(eye);actions.appendChild(cancel);actions.appendChild(ok);card.appendChild(title);card.appendChild(wrap);card.appendChild(actions);overlay.appendChild(card);document.body.appendChild(overlay);input.focus();
+  });
+}
+(function(){
+  function installPasswordEyes(root){
+    (root||document).querySelectorAll('input[type="password"]:not([data-eye-ready])').forEach(function(input){
+      input.setAttribute('data-eye-ready','1');
+      var wrap=document.createElement('div');wrap.className='password-eye-wrap';
+      input.parentNode.insertBefore(wrap,input);wrap.appendChild(input);
+      var btn=document.createElement('button');btn.type='button';btn.className='password-eye-btn';
+      btn.setAttribute('aria-label','Afficher le mot de passe');btn.setAttribute('aria-pressed','false');btn.setAttribute('title','Afficher / masquer');
+      btn.innerHTML='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+      btn.addEventListener('click',function(){
+        var visible=input.type==='password';input.type=visible?'text':'password';
+        btn.setAttribute('aria-pressed',visible?'true':'false');
+        btn.setAttribute('aria-label',visible?'Masquer le mot de passe':'Afficher le mot de passe');
+        btn.innerHTML=visible
+          ?'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a16 16 0 0 1-3.1 3.8M6.2 6.2C3.5 8 2 12 2 12s3.6 7 10 7a10 10 0 0 0 4-.8"/></svg>'
+          :'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+      });
+      wrap.appendChild(btn);
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){installPasswordEyes();});else installPasswordEyes();
+  // Couvre aussi les champs de mot de passe ajoutés ultérieurement dans les modales.
+  if(window.MutationObserver)new MutationObserver(function(records){records.forEach(function(r){r.addedNodes.forEach(function(n){if(n.nodeType===1){if(n.matches&&n.matches('input[type="password"]'))installPasswordEyes(n.parentNode);installPasswordEyes(n);}});});}).observe(document.documentElement,{childList:true,subtree:true});
+})();
+</script>
 <style id="stock-photo-large">.mcard-product-photo{display:block;width:100%;height:230px;object-fit:contain;object-position:center;background:rgba(255,255,255,.96);border-radius:14px;margin:0 0 15px;padding:8px;box-sizing:border-box}@media(max-width:700px){.mcard-photo-gallery{grid-template-rows:210px 104px}.mcard-product-photo{height:220px}}
 /* Optimisations de fluidité : rendu différé des zones hors écran et médias */
 img{content-visibility:auto}
-.mcard-product-photo,.mcard-gallery-cell img{decode:async}
 .mcard-photo-gallery{contain:layout paint style}
 </style>
+</body></html>
